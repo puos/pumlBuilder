@@ -50,3 +50,11 @@
 - PUML 파서는 **이 앱이 생성하는 형식** 위주로 동작. 일반 PlantUML의 모든 문법(패키지, note, group/alt, 멀티 initial/final 등)은 미지원 → 필요 시 확장.
 - 매우 큰 다이어그램은 deflate 후에도 URL이 길어질 수 있음 → 정 안 되면 plantuml POST 방식 고려.
 - 아이디어: 다이어그램 4종을 한 파일에 함께 저장/불러오기, undo/redo, PNG 직접 내보내기, 좌표 주석 on/off 옵션.
+
+## 다음에 이어서 할 것 (미결 — 결정 대기)
+**미리보기 레이아웃이 캔버스와 다른 문제.**
+- 원인: 미리보기 버튼은 텍스트만 plantuml.com에 보내고, PlantUML이 **자체 자동 레이아웃(Graphviz)** 으로 위치를 새로 계산한다. 우리가 정한 좌표(`'$pos` 주석)는 PlantUML이 무시 → 빌더 배치 ≠ 미리보기 배치. 관계·레이블 많으면 겹쳐 보임.
+- 정해야 할 방향 (둘 중 택, 사용자와 상의 중):
+  1. **(추천) WYSIWYG**: 미리보기/내보내기를 plantuml.com 대신 **빌더가 그리는 캔버스 SVG를 그대로 SVG/PNG로 내보내기**로 변경 → 화면과 100% 일치.
+  2. PlantUML 렌더 유지 + 레이아웃 힌트로 완화: `left to right direction`, `skinparam nodesep/ranksep`, `hide empty members`, `skinparam linetype ortho` 등 (그래도 완전 일치는 안 됨).
+- 아직 코드 변경 없음. 사용자가 방향 결정하면 진행.
