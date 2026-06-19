@@ -99,7 +99,7 @@
   <div class="spacer"></div>
   <button class="gbtn" id="importBtn">불러오기</button>
   <button class="gbtn primary" id="downloadPuml">.puml 내려받기</button>
-  <input type="file" id="fileInput" accept=".json" style="display:none">
+  <input type="file" id="fileInput" accept=".puml,.txt,.wsd,.iuml,.plantuml" style="display:none">
 </header>
 
 <main>
@@ -618,11 +618,113 @@ function recalcAll(){["class","state","robust"].forEach(tp=>{const save=type;typ
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600);}
 
+// ---------- puml import (reverse of genCode) ----------
+const ARROW2REL={"--|>":"extension","..|>":"realize","-->":"assoc","o--":"aggreg","*--":"compos","..>":"depend"};
+function arrowToRel(a){return ARROW2REL[a]||"assoc";}
+function splitEdge(l){
+  let label="",body=l;const ci=l.indexOf(":");
+  if(ci>=0){label=l.slice(ci+1).trim();body=l.slice(0,ci).trim();}
+  const p=body.split(/\s+/);
+  if(p.length<3||!/-/.test(p[1]))return null;
+  return {from:p[0],arrow:p[1],to:p[2],label};
+}
+function autoLayout(d){
+  const n=d.nodes.length;if(!n)return;
+  const cols=Math.max(1,Math.ceil(Math.sqrt(n)));
+  d.nodes.forEach((nd,i)=>{
+    const c=i%cols,r=Math.floor(i/cols);
+    nd.x=Math.round((60+c*240)/8)*8;nd.y=Math.round((50+r*180)/8)*8;
+  });
+}
+function detectPumlType(lines){
+  if(lines.some(l=>/^class\b/.test(l)))return "class";
+  if(lines.some(l=>/^state\b/.test(l))||lines.some(l=>/\[\*\]/.test(l)))return "state";
+  if(lines.some(l=>/^participant\b/i.test(l)))return "sequence";
+  let seq=false;
+  lines.forEach(l=>{const e=splitEdge(l);if(e&&e.arrow.includes(">"))seq=true;});
+  return seq?"sequence":"robust";
+}
+function parseClass(lines){
+  const d={nodes:[],edges:[],nextId:1},amap={};let id=1,cur=null;
+  lines.forEach(l=>{
+    if(cur){if(l==="}"){cur=null;return;}if(l.includes("("))cur.methods.push(l);else cur.attrs.push(l);return;}
+    let m=l.match(/^class\s+(?:"([^"]*)"|(\S+))\s+as\s+(\w+)\s*(.*)$/);
+    let name,alias,rest;
+    if(m){name=m[1]!=null?m[1]:m[2];alias=m[3];rest=m[4]||"";}
+    else{m=l.match(/^class\s+(?:"([^"]*)"|(\S+))\s*(.*)$/);if(!m)var edge=true;else{name=m[1]!=null?m[1]:m[2];alias=name;rest=m[3]||"";}}
+    if(name!=null){
+      const st=(rest.match(/<<\s*([^>]*?)\s*>>/)||[])[1]||"";
+      const node={id,x:0,y:0,name,stereotype:st,attrs:[],methods:[]};
+      amap[alias]=id;id++;d.nodes.push(node);
+      if(/\{\s*$/.test(rest))cur=node;
+      return;
+    }
+    const e=splitEdge(l);
+    if(e&&amap[e.from]!=null&&amap[e.to]!=null)
+      d.edges.push({id:id++,from:amap[e.from],to:amap[e.to],rel:arrowToRel(e.arrow),label:e.label});
+  });
+  d.nextId=id;return d;
+}
+function parseState(lines){
+  const d={nodes:[],edges:[],nextId:1},amap={};let id=1,initialId=null,finalId=null;
+  lines.forEach(l=>{const m=l.match(/^state\s+(?:"([^"]*)"|(\S+))\s+as\s+(\w+)/);
+    if(m){d.nodes.push({id,x:0,y:0,kind:"state",name:m[1]!=null?m[1]:m[2]});amap[m[3]]=id;id++;}});
+  lines.forEach(l=>{
+    if(/^state\b/.test(l))return;const e=splitEdge(l);if(!e)return;
+    let fromId,toId;
+    if(e.from==="[*]"){if(initialId==null){initialId=id;d.nodes.push({id:id++,x:0,y:0,kind:"initial"});}fromId=initialId;}else fromId=amap[e.from];
+    if(e.to==="[*]"){if(finalId==null){finalId=id;d.nodes.push({id:id++,x:0,y:0,kind:"final"});}toId=finalId;}else toId=amap[e.to];
+    if(fromId!=null&&toId!=null)d.edges.push({id:id++,from:fromId,to:toId,rel:"transit",label:e.label});
+  });
+  d.nextId=id;return d;
+}
+function parseRobust(lines){
+  const d={nodes:[],edges:[],nextId:1},amap={};let id=1;
+  lines.forEach(l=>{const m=l.match(/^(actor|boundary|control|entity)\s+(?:"([^"]*)"|(\S+))\s+as\s+(\w+)/);
+    if(m){d.nodes.push({id,x:0,y:0,kind:m[1],name:m[2]!=null?m[2]:m[3]});amap[m[4]]=id;id++;}});
+  lines.forEach(l=>{
+    if(/^(actor|boundary|control|entity)\b/.test(l))return;const e=splitEdge(l);if(!e)return;
+    if(amap[e.from]!=null&&amap[e.to]!=null)d.edges.push({id:id++,from:amap[e.from],to:amap[e.to],rel:"link",label:e.label});
+  });
+  d.nextId=id;return d;
+}
+function parseSequence(lines){
+  const d={parts:[],msgs:[],nextId:1},amap={};let id=1;const AR={"->":"sync","->>":"async","-->":"reply"};
+  lines.forEach(l=>{const m=l.match(/^(participant|actor|boundary|control|entity|database)\s+(?:"([^"]*)"|(\S+))\s+as\s+(\w+)/);
+    if(m){const pid="p"+id;d.parts.push({id:pid,kind:m[1],name:m[2]!=null?m[2]:m[3]});amap[m[4]]=pid;id++;}});
+  lines.forEach(l=>{
+    if(/^(participant|actor|boundary|control|entity|database)\b/.test(l))return;const e=splitEdge(l);if(!e||!e.arrow.includes(">"))return;
+    if(amap[e.from]!=null&&amap[e.to]!=null)d.msgs.push({id:"m"+(id++),from:amap[e.from],to:amap[e.to],kind:AR[e.arrow]||"sync",label:e.label});
+  });
+  d.nextId=id;return d;
+}
+function parsePuml(text){
+  const lines=text.split(/\r?\n/).map(l=>l.replace(/\t/g," ").trim())
+    .filter(l=>l&&!/^@(start|end)uml/i.test(l)&&!l.startsWith("'"));
+  const tp=detectPumlType(lines);
+  const data=tp==="class"?parseClass(lines):tp==="state"?parseState(lines):tp==="sequence"?parseSequence(lines):parseRobust(lines);
+  return {type:tp,data};
+}
+
 // ---------- top actions ----------
 $("#copyBtn").onclick=()=>{navigator.clipboard.writeText(genCode()).then(()=>toast("코드를 복사했어요"),()=>toast("복사 실패"));};
 $("#downloadPuml").onclick=()=>{const blob=new Blob([genCode()],{type:"text/plain"});dl(blob,type+".puml");toast(".puml 파일을 내려받았어요");};
 $("#importBtn").onclick=()=>$("#fileInput").click();
-$("#fileInput").onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{DB=JSON.parse(r.result);recalcAll();render();inspector();updateCode();toast("불러왔어요");}catch(e){toast("파일을 읽을 수 없어요");}};r.readAsText(f);ev.target.value="";};
+$("#fileInput").onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{
+  const txt=String(r.result||"");
+  try{
+    if(txt.trim().startsWith("{")){ // legacy JSON
+      DB=JSON.parse(txt);recalcAll();render();inspector();updateCode();toast("불러왔어요 (JSON)");return;
+    }
+    const {type:tp,data}=parsePuml(txt);
+    DB[tp]=data;
+    type=tp;sel=null;connect=null;connectFrom=null;
+    document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.type===tp));
+    if(tp!=="sequence"){autoLayout(DB[tp]);DB[tp].nodes.forEach(sizeNode);}
+    buildToolbar();render();inspector();updateCode();
+    toast(tp+" 다이어그램을 불러왔어요");
+  }catch(e){toast("파일을 읽을 수 없어요");}
+};r.readAsText(f);ev.target.value="";};
 $("#previewBtn").onclick=()=>{
   const src=genCode();const bytes=new TextEncoder().encode(src);
   let hex="";for(const b of bytes)hex+=b.toString(16).padStart(2,"0");
