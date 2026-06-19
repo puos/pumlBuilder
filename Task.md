@@ -14,15 +14,15 @@
 - **배포 방법 = `main`에 push 하면 끝.** GitHub Pages가 1~2분 내 자동 재빌드한다. 별도 버튼/액션 없음.
 
 ## 로컬에서 미리보기
-- 정적 파일이라 아무 정적 서버로 열면 된다. 이 저장소엔 [`.claude/launch.json`](.claude/launch.json)에 python 정적 서버(`python -m http.server 8123`) 설정이 있다 (git에는 커밋 안 함).
-- 또는 그냥 `index.html`을 브라우저로 직접 열어도 동작한다 (단, 미리보기는 plantuml.com 호출이라 인터넷 필요).
+- **가장 간단: `index.html`을 브라우저로 직접 열기**(`file://`). 단일 정적 파일이라 서버가 필요 없다. (미리보기 버튼만 plantuml.com 호출 → 인터넷 필요.)
+- Claude Code의 preview 도구로 띄우려면 [`.claude/launch.json`](.claude/launch.json)의 python 정적 서버(`python -m http.server 8123`) 설정을 사용한다. 이 파일은 **공용 설정이라 커밋한다**(개인 설정 `settings.local.json`만 .gitignore로 제외).
 
 ## 파일 구조
 - `index.html` — 앱 전체 (HTML + CSS + JS)
 - `README.md` — 소개
 - `LICENSE` — MIT (Copyright (c) 2026 puos)
 - `Task.md` — 이 문서
-- `.claude/launch.json` — 로컬 프리뷰 서버 설정 (커밋 제외)
+- `.claude/launch.json` — 로컬 프리뷰 서버 설정 (공용, 커밋함)
 
 ## index.html 코드 지도 (주요 위치)
 - `DB` / `D()` — 다이어그램별 상태(nodes/edges 또는 parts/msgs)
