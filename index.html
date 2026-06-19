@@ -599,7 +599,18 @@ function genCode(){
     d.msgs.forEach(m=>{const a=d.parts.find(p=>p.id===m.from),b=d.parts.find(p=>p.id===m.to);if(!a||!b)return;const lab=m.label?` : ${m.label}`:"";L.push(`${alias("P",a.id)} ${ar[m.kind]||"->"} ${alias("P",b.id)}${lab}`);});
   }
   L.push("@enduml");
+  // node positions saved as comments (ignored by PlantUML, restored on import)
+  if(type!=="sequence"){
+    const d=D();
+    const pos=d.nodes.filter(n=>typeof n.x==="number").map(n=>`'$pos ${posKey(type,n)} ${Math.round(n.x)} ${Math.round(n.y)}`);
+    if(pos.length){L.push("'@layout — positions for PlantUML Builder");L.push(...pos);}
+  }
   return L.join("\n");
+}
+function posKey(tp,n){
+  if(tp==="state"){if(n.kind==="initial")return "@I";if(n.kind==="final")return "@F";return alias("S",n.id);}
+  if(tp==="robust")return alias("R",n.id);
+  return alias("C",n.id);
 }
 function highlight(code){
   return code.replace(/&/g,"&amp;").replace(/</g,"&lt;")
@@ -628,13 +639,32 @@ function splitEdge(l){
   if(p.length<3||!/-/.test(p[1]))return null;
   return {from:p[0],arrow:p[1],to:p[2],label};
 }
-function autoLayout(d){
-  const n=d.nodes.length;if(!n)return;
-  const cols=Math.max(1,Math.ceil(Math.sqrt(n)));
-  d.nodes.forEach((nd,i)=>{
-    const c=i%cols,r=Math.floor(i/cols);
-    nd.x=Math.round((60+c*240)/8)*8;nd.y=Math.round((50+r*180)/8)*8;
+function extractPos(rawLines){
+  const pos={};
+  rawLines.forEach(l=>{const m=l.match(/^'\$pos\s+(\S+)\s+(-?\d+)\s+(-?\d+)/);if(m)pos[m[1]]={x:+m[2],y:+m[3]};});
+  return pos;
+}
+// Restore saved positions where available; grid-place the rest using real node
+// sizes so they never overlap. (sizeNode must have run first to set w/h.)
+function layoutNodes(d,pos,tp){
+  const placed=[],need=[];
+  d.nodes.forEach(n=>{
+    const key=n._alias||(n.kind==="initial"?"@I":n.kind==="final"?"@F":null);
+    const p=key&&pos&&pos[key];
+    if(p){n.x=p.x;n.y=p.y;placed.push(n);}else need.push(n);
+    delete n._alias;
   });
+  if(need.length){
+    let y=50;
+    if(placed.length)y=Math.max(...placed.map(n=>n.y+(n.h||60)))+40;
+    let x=60,rowH=0;const maxW=60+900;
+    need.forEach(n=>{
+      const w=n.w||140,h=n.h||60;
+      if(x>60&&x+w>maxW){x=60;y+=rowH+40;rowH=0;}
+      n.x=Math.round(x/8)*8;n.y=Math.round(y/8)*8;
+      x+=w+40;rowH=Math.max(rowH,h);
+    });
+  }
 }
 function detectPumlType(lines){
   if(lines.some(l=>/^class\b/.test(l)))return "class";
@@ -654,7 +684,7 @@ function parseClass(lines){
     else{m=l.match(/^class\s+(?:"([^"]*)"|(\S+))\s*(.*)$/);if(!m)var edge=true;else{name=m[1]!=null?m[1]:m[2];alias=name;rest=m[3]||"";}}
     if(name!=null){
       const st=(rest.match(/<<\s*([^>]*?)\s*>>/)||[])[1]||"";
-      const node={id,x:0,y:0,name,stereotype:st,attrs:[],methods:[]};
+      const node={id,x:0,y:0,name,stereotype:st,attrs:[],methods:[],_alias:alias};
       amap[alias]=id;id++;d.nodes.push(node);
       if(/\{\s*$/.test(rest))cur=node;
       return;
@@ -668,7 +698,7 @@ function parseClass(lines){
 function parseState(lines){
   const d={nodes:[],edges:[],nextId:1},amap={};let id=1,initialId=null,finalId=null;
   lines.forEach(l=>{const m=l.match(/^state\s+(?:"([^"]*)"|(\S+))\s+as\s+(\w+)/);
-    if(m){d.nodes.push({id,x:0,y:0,kind:"state",name:m[1]!=null?m[1]:m[2]});amap[m[3]]=id;id++;}});
+    if(m){d.nodes.push({id,x:0,y:0,kind:"state",name:m[1]!=null?m[1]:m[2],_alias:m[3]});amap[m[3]]=id;id++;}});
   lines.forEach(l=>{
     if(/^state\b/.test(l))return;const e=splitEdge(l);if(!e)return;
     let fromId,toId;
@@ -681,7 +711,7 @@ function parseState(lines){
 function parseRobust(lines){
   const d={nodes:[],edges:[],nextId:1},amap={};let id=1;
   lines.forEach(l=>{const m=l.match(/^(actor|boundary|control|entity)\s+(?:"([^"]*)"|(\S+))\s+as\s+(\w+)/);
-    if(m){d.nodes.push({id,x:0,y:0,kind:m[1],name:m[2]!=null?m[2]:m[3]});amap[m[4]]=id;id++;}});
+    if(m){d.nodes.push({id,x:0,y:0,kind:m[1],name:m[2]!=null?m[2]:m[3],_alias:m[4]});amap[m[4]]=id;id++;}});
   lines.forEach(l=>{
     if(/^(actor|boundary|control|entity)\b/.test(l))return;const e=splitEdge(l);if(!e)return;
     if(amap[e.from]!=null&&amap[e.to]!=null)d.edges.push({id:id++,from:amap[e.from],to:amap[e.to],rel:"link",label:e.label});
@@ -699,11 +729,12 @@ function parseSequence(lines){
   d.nextId=id;return d;
 }
 function parsePuml(text){
-  const lines=text.split(/\r?\n/).map(l=>l.replace(/\t/g," ").trim())
-    .filter(l=>l&&!/^@(start|end)uml/i.test(l)&&!l.startsWith("'"));
+  const raw=text.split(/\r?\n/).map(l=>l.replace(/\t/g," ").trim());
+  const pos=extractPos(raw);
+  const lines=raw.filter(l=>l&&!/^@(start|end)uml/i.test(l)&&!l.startsWith("'"));
   const tp=detectPumlType(lines);
   const data=tp==="class"?parseClass(lines):tp==="state"?parseState(lines):tp==="sequence"?parseSequence(lines):parseRobust(lines);
-  return {type:tp,data};
+  return {type:tp,data,pos};
 }
 
 // ---------- top actions ----------
@@ -713,11 +744,11 @@ $("#importBtn").onclick=()=>$("#fileInput").click();
 $("#fileInput").onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{
   const txt=String(r.result||"");
   try{
-    const {type:tp,data}=parsePuml(txt);
+    const {type:tp,data,pos}=parsePuml(txt);
     DB[tp]=data;
     type=tp;sel=null;connect=null;connectFrom=null;
     document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.type===tp));
-    if(tp!=="sequence"){autoLayout(DB[tp]);DB[tp].nodes.forEach(sizeNode);}
+    if(tp!=="sequence"){DB[tp].nodes.forEach(sizeNode);layoutNodes(DB[tp],pos,tp);}
     buildToolbar();render();inspector();updateCode();
     toast(tp+" 다이어그램을 불러왔어요");
   }catch(e){toast("파일을 읽을 수 없어요");}
