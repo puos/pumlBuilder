@@ -713,9 +713,6 @@ $("#importBtn").onclick=()=>$("#fileInput").click();
 $("#fileInput").onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{
   const txt=String(r.result||"");
   try{
-    if(txt.trim().startsWith("{")){ // legacy JSON
-      DB=JSON.parse(txt);recalcAll();render();inspector();updateCode();toast("불러왔어요 (JSON)");return;
-    }
     const {type:tp,data}=parsePuml(txt);
     DB[tp]=data;
     type=tp;sel=null;connect=null;connectFrom=null;
