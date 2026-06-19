@@ -294,6 +294,25 @@ function render(){
     drawEdge(e,p1,p2);
   });
   d.nodes.forEach(n=>drawNode(n));
+  fitCanvas();
+}
+
+// Grow the SVG to contain all content (plus padding) so nothing near the
+// right/bottom edge gets clipped; never smaller than the visible area.
+function fitCanvas(){
+  let maxX=0,maxY=0;
+  if(type==="sequence"){
+    const d=D();
+    d.parts.forEach((p,i)=>{const w=Math.max(90,tw(p.name,"500 13px var(--sans)")+24);const x=(p._x!=null?p._x:70+i*150);maxX=Math.max(maxX,x+w/2);});
+    maxY=30+42+10+d.msgs.length*46+30;
+  }else{
+    D().nodes.forEach(n=>{maxX=Math.max(maxX,n.x+(n.w||0));maxY=Math.max(maxY,n.y+(n.h||0));});
+  }
+  const wrap=$("#cwrap");
+  const W=Math.max((wrap.clientWidth||800)-2,Math.ceil(maxX)+160);
+  const H=Math.max((wrap.clientHeight||600)-2,Math.ceil(maxY)+160);
+  svg.setAttribute("width",W);svg.setAttribute("height",H);
+  svg.setAttribute("viewBox","0 0 "+W+" "+H);
 }
 
 function el(tag,attrs,parent){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
@@ -506,6 +525,7 @@ function renderSequence(){
     const nt=el("text",{x:w/2,y:33,"text-anchor":"middle","font-size":13,"font-weight":500,fill:"var(--ink)"},g);nt.textContent=p.name;
     g.addEventListener("pointerdown",ev=>seqDrag(ev,i));
   });
+  fitCanvas();
 }
 function arrow(tip,ang,col,open){
   const back=along(tip,ang+Math.PI,9),perp=ang+Math.PI/2;
