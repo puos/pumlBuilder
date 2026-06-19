@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PlantUML Builder</title>
+<style>
+  :root{
+    --bg:#FBFBF9; --panel:#FFFFFF; --ink:#1B1B1A; --muted:#75736C;
+    --line:#E4E2DB; --line2:#CFCDC4; --accent:#3B5BDB; --accent-soft:#EAEDFB;
+    --grid:#ECEAE3;
+    --bd:#1F4FB0; --bd-bg:#E9F0FF;
+    --ct:#B5532A; --ct-bg:#FBEDE6;
+    --en:#1C7A4D; --en-bg:#E7F5ED;
+    --ac:#5A3FA0; --ac-bg:#F1ECFA;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:var(--sans);color:var(--ink);background:var(--bg);font-size:14px;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+  header{display:flex;align-items:center;gap:18px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel);flex-shrink:0}
+  .brand{font-family:var(--mono);font-weight:600;letter-spacing:.5px;font-size:15px}
+  .brand b{color:var(--accent)}
+  .tabs{display:flex;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:3px}
+  .tab{border:0;background:transparent;font:inherit;font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;color:var(--muted)}
+  .tab.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06);font-weight:500}
+  .spacer{flex:1}
+  .gbtn{border:1px solid var(--line2);background:var(--panel);font:inherit;font-size:12.5px;padding:6px 11px;border-radius:7px;cursor:pointer;color:var(--ink)}
+  .gbtn:hover{background:var(--bg)}
+  .gbtn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .gbtn.primary:hover{filter:brightness(1.05)}
+
+  main{display:flex;flex:1;min-height:0}
+  .left{flex:1;display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--line)}
+  .toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);min-height:44px}
+  .toolbar .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+  .tbtn{border:1px solid var(--line2);background:var(--panel);font:inherit;font-size:12.5px;padding:6px 10px;border-radius:7px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .tbtn:hover{background:var(--bg)}
+  .tbtn.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:500}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .hint{font-size:12px;color:var(--muted);margin-left:4px}
+
+  .canvas-wrap{flex:1;overflow:auto;position:relative;background:
+    radial-gradient(var(--grid) 1px, transparent 1px);
+    background-size:18px 18px;background-position:-1px -1px}
+  svg{display:block}
+  .node{cursor:grab}
+  .node.dragging{cursor:grabbing}
+  .node rect, .node path, .node circle, .node ellipse{vector-effect:non-scaling-stroke}
+  .nsel{outline:none}
+  text{user-select:none;-webkit-user-select:none}
+
+  .right{width:330px;display:flex;flex-direction:column;background:var(--panel);min-width:0}
+  .insp{flex:0 0 auto;max-height:46%;overflow:auto;padding:14px;border-bottom:1px solid var(--line)}
+  .insp h3,.code h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:600}
+  .field{margin-bottom:10px}
+  .field label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:4px}
+  .field input,.field select,.field textarea{width:100%;font:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line2);border-radius:7px;background:var(--bg);color:var(--ink)}
+  .field textarea{font-family:var(--mono);font-size:12.5px;resize:vertical;min-height:60px;line-height:1.5}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+  .row{display:flex;gap:8px}
+  .row>*{flex:1}
+  .empty{color:var(--muted);font-size:13px;line-height:1.6}
+  .del{border:1px solid #E7C3C3;background:#FBEFEF;color:#A32D2D;font:inherit;font-size:12.5px;padding:6px 10px;border-radius:7px;cursor:pointer;width:100%;margin-top:4px}
+  .del:hover{background:#F6E2E2}
+
+  .code{flex:1;display:flex;flex-direction:column;min-height:0;padding:14px}
+  .code-head{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+  .code-head h3{margin:0}
+  .code-head .spacer{flex:1}
+  .mini{border:1px solid var(--line2);background:var(--panel);font:inherit;font-size:11.5px;padding:5px 9px;border-radius:6px;cursor:pointer}
+  .mini:hover{background:var(--bg)}
+  pre{flex:1;margin:0;overflow:auto;background:#1c1c1b;color:#e6e4dc;border-radius:9px;padding:12px 14px;font-family:var(--mono);font-size:12.5px;line-height:1.6;white-space:pre;tab-size:2}
+  .k{color:#9bb4ff} .s{color:#c5e1a5} .a{color:#f2b06b} .c{color:#8a877d}
+
+  /* sequence editor list */
+  .list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+  .item{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:7px;padding:6px 8px;background:var(--bg);font-size:12.5px}
+  .item .grab{cursor:grab;color:var(--muted)}
+  .item .x{margin-left:auto;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:0 2px}
+  .item .x:hover{color:#A32D2D}
+  .pill{font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:5px;border:1px solid var(--line2)}
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:9px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:50}
+  .toast.show{opacity:1}
+  @media (max-width:880px){.right{width:280px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><b>PUML</b> Builder</div>
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-type="class">클래스</button>
+    <button class="tab" data-type="sequence">시퀀스</button>
+    <button class="tab" data-type="robust">로버스트니스</button>
+    <button class="tab" data-type="state">스테이트</button>
+  </div>
+  <div class="spacer"></div>
+  <button class="gbtn" id="importBtn">불러오기</button>
+  <button class="gbtn primary" id="downloadPuml">.puml 내려받기</button>
+  <input type="file" id="fileInput" accept=".json" style="display:none">
+</header>
+
+<main>
+  <div class="left">
+    <div class="toolbar" id="toolbar"></div>
+    <div class="canvas-wrap" id="cwrap">
+      <svg id="svg" width="2200" height="1500" viewBox="0 0 2200 1500">
+        <g id="edges"></g>
+        <g id="nodes"></g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="insp" id="insp"></div>
+    <div class="code">
+      <div class="code-head">
+        <h3>PlantUML 코드</h3>
+        <div class="spacer"></div>
+        <button class="mini" id="copyBtn">복사</button>
+        <button class="mini" id="previewBtn">미리보기 ↗</button>
+      </div>
+      <pre id="code"></pre>
+    </div>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const svg=$("#svg"), gNodes=$("#nodes"), gEdges=$("#edges");
+const SVGNS="http://www.w3.org/2000/svg";
+const measure=document.createElement("canvas").getContext("2d");
+function tw(text,font){measure.font=font;return measure.measureText(text).width;}
+
+// ---------- state ----------
+const empty=()=>({nodes:[],edges:[],nextId:1});
+const emptySeq=()=>({parts:[],msgs:[],nextId:1});
+let DB={class:empty(),robust:empty(),state:empty(),sequence:emptySeq()};
+let type="class";
+let sel=null;              // {kind:'node'|'edge', id}
+let connect=null;          // {rel} when in connect mode
+let connectFrom=null;      // node id chosen as source
+let drag=null;
+
+function D(){return DB[type];}
+
+// ---------- relation specs ----------
+const REL={
+  // class
+  extension:{arrow:"--|>",label:"상속",srcDeco:null,tgtDeco:"tri",dash:false},
+  realize:{arrow:"..|>",label:"실체화",srcDeco:null,tgtDeco:"tri",dash:true},
+  assoc:{arrow:"-->",label:"연관",srcDeco:null,tgtDeco:"arrow",dash:false},
+  aggreg:{arrow:"o--",label:"집합",srcDeco:"odiamond",tgtDeco:null,dash:false},
+  compos:{arrow:"*--",label:"합성",srcDeco:"fdiamond",tgtDeco:null,dash:false},
+  depend:{arrow:"..>",label:"의존",srcDeco:null,tgtDeco:"arrow",dash:true},
+  // state / robustness
+  transit:{arrow:"-->",label:"전이",srcDeco:null,tgtDeco:"arrow",dash:false},
+  link:{arrow:"--",label:"연결",srcDeco:null,tgtDeco:null,dash:false},
+};
+
+const TOOLS={
+  class:[
+    {t:"node",label:"클래스 추가",icon:"▭"},
+    {sep:1},
+    {t:"rel",rel:"extension"},{t:"rel",rel:"realize"},{t:"rel",rel:"assoc"},
+    {t:"rel",rel:"aggreg"},{t:"rel",rel:"compos"},{t:"rel",rel:"depend"},
+  ],
+  state:[
+    {t:"node",label:"상태 추가",icon:"▭"},
+    {t:"node",kind:"initial",label:"시작",icon:"●"},
+    {t:"node",kind:"final",label:"종료",icon:"◉"},
+    {sep:1},
+    {t:"rel",rel:"transit"},
+  ],
+  robust:[
+    {t:"node",kind:"actor",label:"액터",color:"--ac"},
+    {t:"node",kind:"boundary",label:"바운더리",color:"--bd"},
+    {t:"node",kind:"control",label:"컨트롤",color:"--ct"},
+    {t:"node",kind:"entity",label:"엔티티",color:"--en"},
+    {sep:1},
+    {t:"rel",rel:"link"},
+  ],
+};
+
+// ---------- toolbar ----------
+function buildToolbar(){
+  const tb=$("#toolbar"); tb.innerHTML="";
+  if(type==="sequence"){
+    tb.innerHTML='<span class="hint">시퀀스는 오른쪽 패널에서 참여자와 메시지를 추가하세요. 참여자 박스를 드래그해 순서를 바꿀 수 있어요.</span>';
+    return;
+  }
+  TOOLS[type].forEach(spec=>{
+    if(spec.sep){const s=document.createElement("span");s.className="sep";tb.appendChild(s);return;}
+    const b=document.createElement("button");
+    b.className="tbtn";
+    if(spec.t==="node"){
+      const ic=spec.color?`<span class="dot" style="background:var(${spec.color})"></span>`:`<span>${spec.icon||"▭"}</span>`;
+      b.innerHTML=ic+spec.label;
+      b.onclick=()=>{addNode(spec.kind); setConnect(null);};
+    }else{
+      const r=REL[spec.rel];
+      b.dataset.rel=spec.rel;
+      b.innerHTML=`<span style="font-family:var(--mono);font-size:11px">${r.arrow}</span> ${r.label}`;
+      b.onclick=()=>setConnect(connect&&connect.rel===spec.rel?null:spec.rel);
+    }
+    tb.appendChild(b);
+  });
+  const h=document.createElement("span");h.className="hint";
+  h.id="thint";h.textContent="";
+  tb.appendChild(h);
+  refreshToolHint();
+}
+function refreshToolHint(){
+  document.querySelectorAll(".tbtn[data-rel]").forEach(b=>b.classList.toggle("on",connect&&connect.rel===b.dataset.rel));
+  const h=$("#thint"); if(!h)return;
+  if(connect){h.textContent=connectFrom?"대상을 클릭하세요 (Esc 취소)":"시작 노드를 클릭하세요 (Esc 취소)";}
+  else h.textContent="노드를 드래그해 이동 · 클릭해 편집";
+}
+function setConnect(rel){connect=rel?{rel}:null;connectFrom=null;refreshToolHint();render();}
+
+// ---------- add / mutate ----------
+function addNode(kind){
+  const d=D();
+  const wrap=$("#cwrap");
+  const x=Math.round((wrap.scrollLeft+90)/8)*8, y=Math.round((wrap.scrollTop+70)/8)*8;
+  let n;
+  if(type==="class"){
+    n={id:d.nextId++,x,y,name:"NewClass",stereotype:"",attrs:["- field: Type"],methods:["+ method(): void"]};
+  }else if(type==="state"){
+    if(kind==="initial") n={id:d.nextId++,x,y,kind:"initial"};
+    else if(kind==="final") n={id:d.nextId++,x,y,kind:"final"};
+    else n={id:d.nextId++,x,y,kind:"state",name:"State"};
+  }else{ // robust
+    n={id:d.nextId++,x,y,kind,name:kind.charAt(0).toUpperCase()+kind.slice(1)};
+  }
+  d.nodes.push(n); sizeNode(n); selectNode(n.id); render();
+}
+function nodeById(id){return D().nodes.find(n=>n.id===id);}
+function edgeById(id){return D().edges.find(e=>e.id===id);}
+
+function deleteSel(){
+  if(!sel)return;const d=D();
+  if(sel.kind==="node"){
+    d.nodes=d.nodes.filter(n=>n.id!==sel.id);
+    d.edges=d.edges.filter(e=>e.from!==sel.id&&e.to!==sel.id);
+  }else d.edges=d.edges.filter(e=>e.id!==sel.id);
+  sel=null; render(); inspector();
+}
+
+// ---------- sizing ----------
+function sizeNode(n){
+  if(type==="class"){
+    const titleF="600 13px "+getComputedStyle(document.body).fontFamily;
+    const bodyF="12px var(--mono)";
+    let w=tw(n.name||"",titleF);
+    if(n.stereotype) w=Math.max(w,tw("«"+n.stereotype+"»",titleF));
+    [...n.attrs,...n.methods].forEach(t=>{w=Math.max(w,tw(t,bodyF));});
+    n.w=Math.max(120,Math.ceil(w)+28);
+    const head=n.stereotype?40:26;
+    n.h=head+ (n.attrs.length?n.attrs.length*18+10:8) + (n.methods.length?n.methods.length*18+10:8);
+  }else if(type==="state"){
+    if(n.kind==="initial"||n.kind==="final"){n.w=22;n.h=22;}
+    else{const w=tw(n.name||"",("500 13px "+getComputedStyle(document.body).fontFamily));n.w=Math.max(70,Math.ceil(w)+30);n.h=42;}
+  }else{ // robust glyph + label
+    const w=tw(n.name||"",("500 12px "+getComputedStyle(document.body).fontFamily));
+    n.w=Math.max(64,Math.ceil(w)+10); n.h=72; // 48 glyph + label
+  }
+}
+
+// ---------- geometry ----------
+function center(n){return {x:n.x+n.w/2,y:n.y+n.h/2};}
+function edgePoint(n,tx,ty){
+  const c=center(n),dx=tx-c.x,dy=ty-c.y;
+  if(dx===0&&dy===0)return c;
+  const hw=n.w/2,hh=n.h/2;
+  const sx=dx?hw/Math.abs(dx):Infinity, sy=dy?hh/Math.abs(dy):Infinity;
+  const t=Math.min(sx,sy);
+  return {x:c.x+dx*t,y:c.y+dy*t};
+}
+
+// ---------- render ----------
+function render(){
+  if(type==="sequence"){renderSequence();updateCode();return;}
+  gEdges.innerHTML=""; gNodes.innerHTML="";
+  const d=D();
+  d.edges.forEach(e=>{
+    const a=nodeById(e.from),b=nodeById(e.to);if(!a||!b)return;
+    const ca=center(a),cb=center(b);
+    const p1=edgePoint(a,cb.x,cb.y),p2=edgePoint(b,ca.x,ca.y);
+    drawEdge(e,p1,p2);
+  });
+  d.nodes.forEach(n=>drawNode(n));
+}
+
+function el(tag,attrs,parent){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+
+function drawEdge(e,p1,p2){
+  const r=REL[e.rel];
+  const ang=Math.atan2(p2.y-p1.y,p2.x-p1.x);
+  // shorten ends for decorations
+  let a1={...p1},a2={...p2};
+  if(r.tgtDeco) a2=along(p2,ang+Math.PI,12);
+  if(r.srcDeco) a1=along(p1,ang,12);
+  const hit=el("line",{x1:p1.x,y1:p1.y,x2:p2.x,y2:p2.y,stroke:"transparent","stroke-width":12,style:"cursor:pointer"},gEdges);
+  hit.onclick=ev=>{ev.stopPropagation();selectEdge(e.id);};
+  el("line",{x1:a1.x,y1:a1.y,x2:a2.x,y2:a2.y,stroke:sel&&sel.kind==="edge"&&sel.id===e.id?"var(--accent)":"#7d7b73","stroke-width":sel&&sel.kind==="edge"&&sel.id===e.id?2:1.4,"stroke-dasharray":r.dash?"5 4":"none"},gEdges);
+  if(r.tgtDeco) deco(r.tgtDeco,p2,ang+Math.PI);
+  if(r.srcDeco) deco(r.srcDeco,p1,ang);
+  if(e.label){
+    const mx=(p1.x+p2.x)/2,my=(p1.y+p2.y)/2;
+    const w=tw(e.label,"11px var(--sans)")+8;
+    el("rect",{x:mx-w/2,y:my-9,width:w,height:16,rx:4,fill:"var(--bg)",stroke:"var(--line)"},gEdges);
+    const t=el("text",{x:mx,y:my+3,"text-anchor":"middle","font-size":11,fill:"var(--muted)"},gEdges);t.textContent=e.label;
+  }
+}
+function along(p,ang,d){return {x:p.x+Math.cos(ang)*d,y:p.y+Math.sin(ang)*d};}
+function deco(kind,tip,ang){
+  const back=along(tip,ang,12), perp=ang+Math.PI/2;
+  const l=along(back,perp,6), r=along(back,perp,-6);
+  if(kind==="tri"){
+    el("polygon",{points:`${tip.x},${tip.y} ${l.x},${l.y} ${r.x},${r.y}`,fill:"var(--panel)",stroke:"#7d7b73","stroke-width":1.4},gEdges);
+  }else if(kind==="arrow"){
+    el("polyline",{points:`${l.x},${l.y} ${tip.x},${tip.y} ${r.x},${r.y}`,fill:"none",stroke:"#7d7b73","stroke-width":1.4},gEdges);
+  }else if(kind==="odiamond"||kind==="fdiamond"){
+    const t2=along(tip,ang,12), s1=along(back,perp,5),s2=along(back,perp,-5);
+    el("polygon",{points:`${tip.x},${tip.y} ${s1.x},${s1.y} ${t2.x},${t2.y} ${s2.x},${s2.y}`,fill:kind==="fdiamond"?"#7d7b73":"var(--panel)",stroke:"#7d7b73","stroke-width":1.4},gEdges);
+  }
+}
+
+function drawNode(n){
+  const g=el("g",{class:"node","data-node":n.id,transform:`translate(${n.x},${n.y})`},gNodes);
+  const isSel=sel&&sel.kind==="node"&&sel.id===n.id;
+  const stroke=isSel?"var(--accent)":"var(--line2)", sw=isSel?2:1.2;
+  if(type==="class"){
+    el("rect",{x:0,y:0,width:n.w,height:n.h,rx:7,fill:"var(--panel)",stroke,"stroke-width":sw},g);
+    let y=0; const head=n.stereotype?40:26;
+    el("rect",{x:0,y:0,width:n.w,height:head,rx:7,fill:"#F4F3EE",stroke:"none"},g);
+    el("rect",{x:0,y:head-7,width:n.w,height:7,fill:"#F4F3EE"},g);
+    if(n.stereotype){const st=el("text",{x:n.w/2,y:15,"text-anchor":"middle","font-size":11,fill:"var(--muted)","font-style":"italic"},g);st.textContent="«"+n.stereotype+"»";}
+    const nt=el("text",{x:n.w/2,y:n.stereotype?32:18,"text-anchor":"middle","font-size":13,"font-weight":600,fill:"var(--ink)"},g);nt.textContent=n.name;
+    el("line",{x1:0,y1:head,x2:n.w,y2:head,stroke:"var(--line2)","stroke-width":1},g);
+    y=head+15;
+    n.attrs.forEach(a=>{const t=el("text",{x:10,y,"font-size":12,"font-family":"var(--mono)",fill:"var(--ink)"},g);t.textContent=a;y+=18;});
+    if(n.attrs.length)y+=2;
+    const mtop=head+(n.attrs.length?n.attrs.length*18+10:8);
+    el("line",{x1:0,y1:mtop,x2:n.w,y2:mtop,stroke:"var(--line2)","stroke-width":1},g);
+    y=mtop+15;
+    n.methods.forEach(m=>{const t=el("text",{x:10,y,"font-size":12,"font-family":"var(--mono)",fill:"var(--ink)"},g);t.textContent=m;y+=18;});
+  }else if(type==="state"){
+    if(n.kind==="initial"){el("circle",{cx:11,cy:11,r:9,fill:"#2b2b29",stroke,"stroke-width":sw},g);}
+    else if(n.kind==="final"){el("circle",{cx:11,cy:11,r:9,fill:"none",stroke,"stroke-width":sw},g);el("circle",{cx:11,cy:11,r:5,fill:"#2b2b29"},g);}
+    else{el("rect",{x:0,y:0,width:n.w,height:n.h,rx:12,fill:"var(--panel)",stroke,"stroke-width":sw},g);const t=el("text",{x:n.w/2,y:n.h/2+5,"text-anchor":"middle","font-size":13,"font-weight":500,fill:"var(--ink)"},g);t.textContent=n.name;}
+  }else{ // robustness glyphs
+    drawGlyph(n,g,stroke,sw);
+    const t=el("text",{x:n.w/2,y:68,"text-anchor":"middle","font-size":12,"font-weight":500,fill:"var(--ink)"},g);t.textContent=n.name;
+  }
+  // interaction
+  g.addEventListener("pointerdown",ev=>onNodeDown(ev,n));
+  g.addEventListener("dblclick",ev=>{ev.stopPropagation();selectNode(n.id);const f=$("#insp input");if(f)f.focus();});
+}
+
+function drawGlyph(n,g,stroke,sw){
+  const cx=n.w/2,cy=24,r=14;
+  const col={actor:"--ac",boundary:"--bd",control:"--ct",entity:"--en"}[n.kind];
+  const bg={actor:"--ac-bg",boundary:"--bd-bg",control:"--ct-bg",entity:"--en-bg"}[n.kind];
+  const c=`var(${col})`;
+  if(n.kind==="actor"){
+    el("circle",{cx,cy:14,r:7,fill:`var(${bg})`,stroke:isSelCol(n,c,stroke),"stroke-width":sw},g);
+    el("line",{x1:cx,y1:21,x2:cx,y2:36,stroke:c,"stroke-width":sw},g);
+    el("line",{x1:cx-9,y1:27,x2:cx+9,y2:27,stroke:c,"stroke-width":sw},g);
+    el("line",{x1:cx,y1:36,x2:cx-7,y2:46,stroke:c,"stroke-width":sw},g);
+    el("line",{x1:cx,y1:36,x2:cx+7,y2:46,stroke:c,"stroke-width":sw},g);
+  }else if(n.kind==="boundary"){
+    el("line",{x1:cx-22,y1:cy-13,x2:cx-22,y2:cy+13,stroke:c,"stroke-width":sw},g);
+    el("line",{x1:cx-22,y1:cy,x2:cx-r,y2:cy,stroke:c,"stroke-width":sw},g);
+    el("circle",{cx,cy,r,fill:`var(${bg})`,stroke:isSelCol(n,c,stroke),"stroke-width":sw},g);
+  }else if(n.kind==="control"){
+    el("circle",{cx,cy,r,fill:`var(${bg})`,stroke:isSelCol(n,c,stroke),"stroke-width":sw},g);
+    el("path",{d:`M ${cx-3} ${cy-r-1} l 6 3 l -6 3`,fill:"none",stroke:c,"stroke-width":sw},g);
+  }else{ // entity
+    el("circle",{cx,cy,r,fill:`var(${bg})`,stroke:isSelCol(n,c,stroke),"stroke-width":sw},g);
+    el("line",{x1:cx-r,y1:cy+r+3,x2:cx+r,y2:cy+r+3,stroke:c,"stroke-width":sw},g);
+  }
+}
+function isSelCol(n,c,stroke){return (sel&&sel.kind==="node"&&sel.id===n.id)?"var(--accent)":c;}
+
+// ---------- node drag / connect ----------
+function svgPt(ev){const r=svg.getBoundingClientRect();return {x:ev.clientX-r.left,y:ev.clientY-r.top};}
+function onNodeDown(ev,n){
+  ev.stopPropagation();
+  if(connect){
+    if(!connectFrom){connectFrom=n.id;refreshToolHint();render();highlightFrom();}
+    else{
+      if(connectFrom!==n.id || type==="state"){
+        D().edges.push({id:"e"+(D().nextId++),from:connectFrom,to:n.id,rel:connect.rel,label:""});
+      }
+      setConnect(null);
+    }
+    return;
+  }
+  const p=svgPt(ev);
+  drag={id:n.id,dx:p.x-n.x,dy:p.y-n.y,moved:false};
+  svg.setPointerCapture(ev.pointerId);
+}
+function highlightFrom(){const g=gNodes.querySelector(`[data-node="${connectFrom}"]`);if(g){const s=g.querySelector("rect,circle");if(s)s.setAttribute("stroke","var(--accent)");}}
+svg.addEventListener("pointermove",ev=>{
+  if(!drag)return;
+  const p=svgPt(ev),n=nodeById(drag.id);if(!n)return;
+  n.x=Math.round((p.x-drag.dx)/8)*8;n.y=Math.round((p.y-drag.dy)/8)*8;
+  drag.moved=true;render();
+});
+svg.addEventListener("pointerup",ev=>{
+  if(drag){const moved=drag.moved,id=drag.id;drag=null;if(!moved)selectNode(id);else updateCode();}
+});
+svg.addEventListener("pointerdown",()=>{if(!connect){sel=null;render();inspector();}else{setConnect(connect.rel!==undefined?null:null);}});
+
+// ---------- selection / inspector ----------
+function selectNode(id){sel={kind:"node",id};render();inspector();}
+function selectEdge(id){sel={kind:"edge",id};render();inspector();}
+
+function inspector(){
+  const box=$("#insp");
+  if(type==="sequence"){renderSeqPanel();return;}
+  if(!sel){box.innerHTML='<h3>속성</h3><div class="empty">노드나 연결선을 클릭하면 여기서 편집할 수 있어요.<br><br>좌측 도구로 요소를 추가하고, 연결 도구를 누른 뒤 시작·대상 노드를 차례로 클릭해 선으로 잇습니다.</div>';return;}
+  if(sel.kind==="edge"){
+    const e=edgeById(sel.id);if(!e){sel=null;return inspector();}
+    const opts=Object.keys(REL).filter(k=>relAllowed(k)).map(k=>`<option value="${k}" ${e.rel===k?"selected":""}>${REL[k].arrow}  ${REL[k].label}</option>`).join("");
+    box.innerHTML=`<h3>연결</h3>
+      <div class="field"><label>종류</label><select id="f_rel">${opts}</select></div>
+      <div class="field"><label>레이블</label><input id="f_lab" value="${esc(e.label||"")}" placeholder="(선택)"></div>
+      <button class="del" id="f_del">연결 삭제</button>`;
+    $("#f_rel").onchange=ev=>{e.rel=ev.target.value;render();};
+    $("#f_lab").oninput=ev=>{e.label=ev.target.value;render();};
+    $("#f_del").onclick=deleteSel;return;
+  }
+  const n=nodeById(sel.id);if(!n){sel=null;return inspector();}
+  if(type==="class"){
+    box.innerHTML=`<h3>클래스</h3>
+      <div class="field"><label>이름</label><input id="f_name" value="${esc(n.name)}"></div>
+      <div class="field"><label>스테레오타입</label><input id="f_st" value="${esc(n.stereotype||"")}" placeholder="예: interface, abstract"></div>
+      <div class="field"><label>속성 (한 줄에 하나)</label><textarea id="f_at">${esc(n.attrs.join("\n"))}</textarea></div>
+      <div class="field"><label>메서드 (한 줄에 하나)</label><textarea id="f_me">${esc(n.methods.join("\n"))}</textarea></div>
+      <button class="del" id="f_del">클래스 삭제</button>`;
+    const up=()=>{n.name=$("#f_name").value;n.stereotype=$("#f_st").value.trim();
+      n.attrs=$("#f_at").value.split("\n").filter(s=>s.trim()!=="");
+      n.methods=$("#f_me").value.split("\n").filter(s=>s.trim()!=="");
+      sizeNode(n);render();};
+    ["f_name","f_st","f_at","f_me"].forEach(id=>$("#"+id).oninput=up);
+  }else if(type==="state"){
+    if(n.kind==="initial"||n.kind==="final"){
+      box.innerHTML=`<h3>${n.kind==="initial"?"시작 상태":"종료 상태"}</h3><div class="empty">의사 상태 <code>[*]</code> 입니다. 위치만 조정할 수 있어요.</div><button class="del" id="f_del">삭제</button>`;
+    }else{
+      box.innerHTML=`<h3>상태</h3><div class="field"><label>이름</label><input id="f_name" value="${esc(n.name)}"></div><button class="del" id="f_del">상태 삭제</button>`;
+      $("#f_name").oninput=ev=>{n.name=ev.target.value;sizeNode(n);render();};
+    }
+  }else{
+    const kmap={actor:"액터",boundary:"바운더리",control:"컨트롤",entity:"엔티티"};
+    box.innerHTML=`<h3>${kmap[n.kind]}</h3><div class="field"><label>이름</label><input id="f_name" value="${esc(n.name)}"></div><button class="del" id="f_del">삭제</button>`;
+    $("#f_name").oninput=ev=>{n.name=ev.target.value;sizeNode(n);render();};
+  }
+  if($("#f_del"))$("#f_del").onclick=deleteSel;
+}
+function relAllowed(k){
+  if(type==="class")return ["extension","realize","assoc","aggreg","compos","depend"].includes(k);
+  if(type==="state")return k==="transit";
+  return k==="link";
+}
+
+// ---------- sequence ----------
+const PKIND={participant:"participant",actor:"actor",boundary:"boundary",control:"control",entity:"entity",database:"database"};
+function renderSequence(){
+  gEdges.innerHTML="";gNodes.innerHTML="";
+  const d=D(),parts=d.parts;
+  const x0=70,gap=150,top=30,boxH=42;
+  parts.forEach((p,i)=>{p._x=x0+i*gap;});
+  const bottom=top+boxH+10+d.msgs.length*46+30;
+  // lifelines
+  parts.forEach(p=>{
+    el("line",{x1:p._x,y1:top+boxH,x2:p._x,y2:bottom,stroke:"var(--line2)","stroke-width":1,"stroke-dasharray":"4 4"},gEdges);
+  });
+  // messages
+  d.msgs.forEach((m,i)=>{
+    const a=parts.find(p=>p.id===m.from),b=parts.find(p=>p.id===m.to);if(!a||!b)return;
+    const y=top+boxH+30+i*46;const dash=m.kind==="reply"?"5 4":"none";
+    if(m.from===m.to){
+      el("path",{d:`M ${a._x} ${y} h 34 v 18 h -30`,fill:"none",stroke:"#7d7b73","stroke-width":1.4},gEdges);
+      arrow({x:a._x+4,y:y+18},Math.PI,"#7d7b73");
+      const t=el("text",{x:a._x+42,y:y+2,"font-size":12,fill:"var(--ink)"},gEdges);t.textContent=m.label;
+    }else{
+      const dir=b._x>a._x?1:-1;
+      el("line",{x1:a._x,y1:y,x2:b._x,y2:y,stroke:"#7d7b73","stroke-width":1.4,"stroke-dasharray":dash},gEdges);
+      arrow({x:b._x,y},dir>0?0:Math.PI,"#7d7b73",m.kind==="async");
+      const t=el("text",{x:(a._x+b._x)/2,y:y-6,"text-anchor":"middle","font-size":12,fill:"var(--ink)"},gEdges);t.textContent=m.label;
+    }
+  });
+  // participant boxes (draggable to reorder)
+  parts.forEach((p,i)=>{
+    const w=Math.max(90,tw(p.name,"500 13px var(--sans)")+24);
+    const g=el("g",{class:"node","data-pidx":i,transform:`translate(${p._x-w/2},${top})`},gNodes);
+    el("rect",{x:0,y:0,width:w,height:boxH,rx:7,fill:"var(--panel)",stroke:"var(--line2)","stroke-width":1.2},g);
+    const kt=el("text",{x:w/2,y:16,"text-anchor":"middle","font-size":10,fill:"var(--muted)"},g);kt.textContent="«"+p.kind+"»";
+    const nt=el("text",{x:w/2,y:33,"text-anchor":"middle","font-size":13,"font-weight":500,fill:"var(--ink)"},g);nt.textContent=p.name;
+    g.addEventListener("pointerdown",ev=>seqDrag(ev,i));
+  });
+}
+function arrow(tip,ang,col,open){
+  const back=along(tip,ang+Math.PI,9),perp=ang+Math.PI/2;
+  const l=along(back,perp,5),r=along(back,perp,-5);
+  if(open)el("polyline",{points:`${l.x},${l.y} ${tip.x},${tip.y} ${r.x},${r.y}`,fill:"none",stroke:col,"stroke-width":1.4},gEdges);
+  else el("polygon",{points:`${tip.x},${tip.y} ${l.x},${l.y} ${r.x},${r.y}`,fill:col},gEdges);
+}
+let seqDragState=null;
+function seqDrag(ev,idx){
+  ev.stopPropagation();
+  seqDragState={idx,startX:ev.clientX};
+  svg.setPointerCapture(ev.pointerId);
+}
+svg.addEventListener("pointermove",ev=>{
+  if(!seqDragState||type!=="sequence")return;
+  const dx=ev.clientX-seqDragState.startX;
+  if(Math.abs(dx)>75){
+    const d=D(),i=seqDragState.idx,j=i+(dx>0?1:-1);
+    if(j>=0&&j<d.parts.length){[d.parts[i],d.parts[j]]=[d.parts[j],d.parts[i]];seqDragState.idx=j;seqDragState.startX=ev.clientX;render();renderSeqPanel();}
+  }
+});
+svg.addEventListener("pointerup",()=>{seqDragState=null;});
+
+function renderSeqPanel(){
+  const d=D(),box=$("#insp");
+  const popts=k=>Object.keys(PKIND).map(x=>`<option value="${x}" ${x===k?"selected":""}>${x}</option>`).join("");
+  let h=`<h3>참여자</h3><div class="list" id="plist">`;
+  if(!d.parts.length)h+='<div class="empty">아직 참여자가 없어요.</div>';
+  d.parts.forEach((p,i)=>{h+=`<div class="item"><span class="pill">${p.kind}</span><input data-pi="${i}" value="${esc(p.name)}" style="flex:1;border:1px solid var(--line2);border-radius:6px;padding:4px 7px;font:inherit;font-size:12.5px;background:var(--panel)"><button class="x" data-pdel="${i}">×</button></div>`;});
+  h+=`</div><div class="row" style="margin-bottom:14px"><select id="newKind">${popts("participant")}</select><button class="gbtn" id="addPart">참여자 추가</button></div>`;
+
+  h+=`<h3>메시지</h3><div class="list" id="mlist">`;
+  if(!d.msgs.length)h+='<div class="empty">참여자 두 명 이상이면 메시지를 추가할 수 있어요.</div>';
+  d.msgs.forEach((m,i)=>{
+    const a=d.parts.find(p=>p.id===m.from),b=d.parts.find(p=>p.id===m.to);
+    const ar={sync:"→",async:"⇢",reply:"⤍"}[m.kind]||"→";
+    h+=`<div class="item"><span class="grab" data-mup="${i}">↑</span><span class="grab" data-mdn="${i}">↓</span><span style="flex:1">${esc(a?a.name:"?")} <b>${ar}</b> ${esc(b?b.name:"?")}${m.label?' : '+esc(m.label):''}</span><button class="x" data-medit="${i}">✎</button><button class="x" data-mdel="${i}">×</button></div>`;
+  });
+  h+=`</div>`;
+  if(d.parts.length>=1){
+    const sopts=d.parts.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+    h+=`<div class="field"><label>새 메시지</label><div class="row"><select id="mFrom">${sopts}</select><select id="mTo">${sopts}</select></div></div>
+    <div class="row" style="margin-bottom:6px"><select id="mKind"><option value="sync">→ 동기</option><option value="async">⇢ 비동기</option><option value="reply">⤍ 반환</option></select><input id="mLabel" placeholder="레이블"></div>
+    <button class="gbtn" id="addMsg" style="width:100%">메시지 추가</button>`;
+  }
+  box.innerHTML=h;
+
+  d.parts.forEach((p,i)=>{const inp=box.querySelector(`[data-pi="${i}"]`);if(inp)inp.oninput=e=>{p.name=e.target.value;render();updateCode();};});
+  box.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=()=>{const i=+b.dataset.pdel;const id=d.parts[i].id;d.parts.splice(i,1);d.msgs=d.msgs.filter(m=>m.from!==id&&m.to!==id);render();renderSeqPanel();updateCode();});
+  if($("#addPart"))$("#addPart").onclick=()=>{d.parts.push({id:"p"+(d.nextId++),kind:$("#newKind").value,name:"Part"+(d.parts.length+1)});render();renderSeqPanel();updateCode();};
+  box.querySelectorAll("[data-mdel]").forEach(b=>b.onclick=()=>{d.msgs.splice(+b.dataset.mdel,1);render();renderSeqPanel();updateCode();});
+  box.querySelectorAll("[data-mup]").forEach(b=>b.onclick=()=>{const i=+b.dataset.mup;if(i>0){[d.msgs[i],d.msgs[i-1]]=[d.msgs[i-1],d.msgs[i]];render();renderSeqPanel();updateCode();}});
+  box.querySelectorAll("[data-mdn]").forEach(b=>b.onclick=()=>{const i=+b.dataset.mdn;if(i<d.msgs.length-1){[d.msgs[i],d.msgs[i+1]]=[d.msgs[i+1],d.msgs[i]];render();renderSeqPanel();updateCode();}});
+  box.querySelectorAll("[data-medit]").forEach(b=>b.onclick=()=>{const i=+b.dataset.medit;const m=d.msgs[i];const nl=prompt("메시지 레이블",m.label||"");if(nl!==null){m.label=nl;render();renderSeqPanel();updateCode();}});
+  if($("#addMsg"))$("#addMsg").onclick=()=>{d.msgs.push({id:"m"+(d.nextId++),from:$("#mFrom").value,to:$("#mTo").value,kind:$("#mKind").value,label:$("#mLabel").value});render();renderSeqPanel();updateCode();};
+}
+
+// ---------- code generation ----------
+function alias(prefix,id){return prefix+String(id).replace(/[^0-9]/g,"");}
+// When a name is paired with "as <alias>", PlantUML requires the display name to be quoted.
+function q(s){return `"${String(s).replace(/"/g,'\\"')}"`;}
+function genCode(){
+  let L=["@startuml"];
+  if(type==="class"){
+    const d=D();
+    d.nodes.forEach(n=>{
+      const al=alias("C",n.id);
+      const st=n.stereotype?` <<${n.stereotype}>>`:"";
+      const body=[...n.attrs,...n.methods];
+      if(body.length){L.push(`class ${q(n.name)} as ${al}${st} {`);body.forEach(b=>L.push("  "+b));L.push("}");}
+      else L.push(`class ${q(n.name)} as ${al}${st}`);
+    });
+    if(d.nodes.length&&d.edges.length)L.push("");
+    d.edges.forEach(e=>{const a=nodeById(e.from),b=nodeById(e.to);if(!a||!b)return;const r=REL[e.rel];const lab=e.label?` : ${e.label}`:"";L.push(`${alias("C",a.id)} ${r.arrow} ${alias("C",b.id)}${lab}`);});
+  }else if(type==="state"){
+    const d=D();
+    d.nodes.filter(n=>n.kind==="state").forEach(n=>L.push(`state ${q(n.name)} as ${alias("S",n.id)}`));
+    if(d.nodes.length&&d.edges.length)L.push("");
+    const ref=n=>(n.kind==="initial"||n.kind==="final")?"[*]":alias("S",n.id);
+    d.edges.forEach(e=>{const a=nodeById(e.from),b=nodeById(e.to);if(!a||!b)return;const lab=e.label?` : ${e.label}`:"";L.push(`${ref(a)} --> ${ref(b)}${lab}`);});
+  }else if(type==="robust"){
+    const d=D();
+    d.nodes.forEach(n=>L.push(`${n.kind} ${q(n.name)} as ${alias("R",n.id)}`));
+    if(d.nodes.length&&d.edges.length)L.push("");
+    d.edges.forEach(e=>{const a=nodeById(e.from),b=nodeById(e.to);if(!a||!b)return;const lab=e.label?` : ${e.label}`:"";L.push(`${alias("R",a.id)} -- ${alias("R",b.id)}${lab}`);});
+  }else{ // sequence
+    const d=D();
+    d.parts.forEach(p=>L.push(`${p.kind} ${q(p.name)} as ${alias("P",p.id)}`));
+    if(d.parts.length&&d.msgs.length)L.push("");
+    const ar={sync:"->",async:"->>",reply:"-->"};
+    d.msgs.forEach(m=>{const a=d.parts.find(p=>p.id===m.from),b=d.parts.find(p=>p.id===m.to);if(!a||!b)return;const lab=m.label?` : ${m.label}`:"";L.push(`${alias("P",a.id)} ${ar[m.kind]||"->"} ${alias("P",b.id)}${lab}`);});
+  }
+  L.push("@enduml");
+  return L.join("\n");
+}
+function highlight(code){
+  return code.replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/(@startuml|@enduml|class|state|participant|actor|boundary|control|entity|database|as)\b/g,'<span class="k">$1</span>')
+    .replace(/(&lt;&lt;[^&]*&gt;&gt;)/g,'<span class="a">$1</span>')
+    .replace(/("[^"]*")/g,'<span class="s">$1</span>');
+}
+function updateCode(){const c=genCode();$("#code").innerHTML=highlight(c);persist();}
+
+// ---------- persistence / io ----------
+function persist(){try{localStorage.setItem("pumlbuilder",JSON.stringify(DB));}catch(e){}}
+function restore(){try{const s=localStorage.getItem("pumlbuilder");if(s){DB=JSON.parse(s);DB.class.nodes.forEach(sizeWrap);DB.state.nodes.forEach(sizeWrap);DB.robust.nodes.forEach(sizeWrap);}}catch(e){}}
+function sizeWrap(n){const t=type;}
+function recalcAll(){["class","state","robust"].forEach(tp=>{const save=type;type=tp;DB[tp].nodes.forEach(sizeNode);type=save;});}
+
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600);}
+
+// ---------- top actions ----------
+$("#copyBtn").onclick=()=>{navigator.clipboard.writeText(genCode()).then(()=>toast("코드를 복사했어요"),()=>toast("복사 실패"));};
+$("#downloadPuml").onclick=()=>{const blob=new Blob([genCode()],{type:"text/plain"});dl(blob,type+".puml");toast(".puml 파일을 내려받았어요");};
+$("#importBtn").onclick=()=>$("#fileInput").click();
+$("#fileInput").onchange=ev=>{const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{DB=JSON.parse(r.result);recalcAll();render();inspector();updateCode();toast("불러왔어요");}catch(e){toast("파일을 읽을 수 없어요");}};r.readAsText(f);ev.target.value="";};
+$("#previewBtn").onclick=()=>{
+  const src=genCode();const bytes=new TextEncoder().encode(src);
+  let hex="";for(const b of bytes)hex+=b.toString(16).padStart(2,"0");
+  window.open("https://www.plantuml.com/plantuml/svg/~h"+hex,"_blank");
+};
+function dl(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+
+// ---------- tabs ----------
+$("#tabs").addEventListener("click",ev=>{
+  const b=ev.target.closest(".tab");if(!b)return;
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t===b));
+  type=b.dataset.type;sel=null;connect=null;connectFrom=null;
+  buildToolbar();render();inspector();updateCode();
+});
+
+document.addEventListener("keydown",ev=>{
+  if(ev.key==="Escape"){setConnect(null);return;}
+  if((ev.key==="Delete"||ev.key==="Backspace")&&sel&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){deleteSel();}
+});
+
+// ---------- seed example ----------
+function seed(){
+  type="class";const d=DB.class;
+  const a={id:d.nextId++,x:120,y:90,name:"Animal",stereotype:"abstract",attrs:["# name: String"],methods:["+ makeSound(): void"]};
+  const b={id:d.nextId++,x:120,y:300,name:"Dog",stereotype:"",attrs:[],methods:["+ makeSound(): void"]};
+  d.nodes.push(a,b);sizeNode(a);sizeNode(b);
+  d.edges.push({id:"e"+(d.nextId++),from:b.id,to:a.id,rel:"extension",label:""});
+}
+
+// ---------- init ----------
+restore();
+if(!DB.class.nodes.length&&!DB.sequence.parts.length&&!DB.state.nodes.length&&!DB.robust.nodes.length)seed();
+recalcAll();
+buildToolbar();render();inspector();updateCode();
+</script>
+</body>
+</html>
