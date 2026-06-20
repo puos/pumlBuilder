@@ -72,8 +72,7 @@
   .code-head .spacer{flex:1}
   .mini{border:1px solid var(--line2);background:var(--panel);font:inherit;font-size:11.5px;padding:5px 9px;border-radius:6px;cursor:pointer}
   .mini:hover{background:var(--bg)}
-  pre{flex:1;margin:0;overflow:auto;background:#1c1c1b;color:#e6e4dc;border-radius:9px;padding:12px 14px;font-family:var(--mono);font-size:12.5px;line-height:1.6;white-space:pre;tab-size:2}
-  .k{color:#9bb4ff} .s{color:#c5e1a5} .a{color:#f2b06b} .c{color:#8a877d}
+  #code{flex:1;margin:0;overflow:auto;background:#1c1c1b;color:#e6e4dc;border-radius:9px;padding:12px 14px;font-family:var(--mono);font-size:12.5px;line-height:1.6;white-space:pre;tab-size:2;resize:none;border:none;outline:none;min-height:0}
 
   /* sequence editor list */
   .list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
@@ -122,7 +121,7 @@
         <button class="mini" id="copyBtn">복사</button>
         <button class="mini" id="previewBtn">미리보기 ↗</button>
       </div>
-      <pre id="code"></pre>
+      <textarea id="code" spellcheck="false"></textarea>
     </div>
   </div>
 </main>
@@ -319,18 +318,29 @@ function el(tag,attrs,parent){const e=document.createElementNS(SVGNS,tag);for(co
 
 function drawEdge(e,p1,p2){
   const r=REL[e.rel];
-  const ang=Math.atan2(p2.y-p1.y,p2.x-p1.x);
-  // shorten ends for decorations
-  let a1={...p1},a2={...p2};
-  if(r.tgtDeco) a2=along(p2,ang+Math.PI,12);
-  if(r.srcDeco) a1=along(p1,ang,12);
-  const hit=el("line",{x1:p1.x,y1:p1.y,x2:p2.x,y2:p2.y,stroke:"transparent","stroke-width":12,style:"cursor:pointer"},gEdges);
+  const dx=p2.x-p1.x;
+  const midX=(p1.x+p2.x)/2;
+  const vertical=Math.abs(dx)<2;
+  // angle of arrival at p2 / departure from p1 (horizontal or vertical)
+  const angEnd=vertical?Math.atan2(p2.y-p1.y,0):Math.atan2(0,dx);
+  const angStart=angEnd;
+  let ep1={...p1},ep2={...p2};
+  if(r.tgtDeco) ep2=along(p2,angEnd+Math.PI,12);
+  if(r.srcDeco) ep1=along(p1,angStart,12);
+  const hitD=vertical
+    ?`M ${p1.x} ${p1.y} V ${p2.y}`
+    :`M ${p1.x} ${p1.y} H ${midX} V ${p2.y} H ${p2.x}`;
+  const visD=vertical
+    ?`M ${ep1.x} ${ep1.y} V ${ep2.y}`
+    :`M ${ep1.x} ${ep1.y} H ${midX} V ${ep2.y} H ${ep2.x}`;
+  const hit=el("path",{d:hitD,stroke:"transparent","stroke-width":12,fill:"none",style:"cursor:pointer"},gEdges);
+  hit.addEventListener("pointerdown",ev=>ev.stopPropagation());
   hit.onclick=ev=>{ev.stopPropagation();selectEdge(e.id);};
-  el("line",{x1:a1.x,y1:a1.y,x2:a2.x,y2:a2.y,stroke:sel&&sel.kind==="edge"&&sel.id===e.id?"var(--accent)":"#7d7b73","stroke-width":sel&&sel.kind==="edge"&&sel.id===e.id?2:1.4,"stroke-dasharray":r.dash?"5 4":"none"},gEdges);
-  if(r.tgtDeco) deco(r.tgtDeco,p2,ang+Math.PI);
-  if(r.srcDeco) deco(r.srcDeco,p1,ang);
+  el("path",{d:visD,stroke:sel&&sel.kind==="edge"&&sel.id===e.id?"var(--accent)":"#7d7b73","stroke-width":sel&&sel.kind==="edge"&&sel.id===e.id?2:1.4,"stroke-dasharray":r.dash?"5 4":"none",fill:"none"},gEdges);
+  if(r.tgtDeco) deco(r.tgtDeco,p2,angEnd+Math.PI);
+  if(r.srcDeco) deco(r.srcDeco,p1,angStart);
   if(e.label){
-    const mx=(p1.x+p2.x)/2,my=(p1.y+p2.y)/2;
+    const mx=vertical?p1.x:midX, my=(p1.y+p2.y)/2;
     const w=tw(e.label,"11px var(--sans)")+8;
     el("rect",{x:mx-w/2,y:my-9,width:w,height:16,rx:4,fill:"var(--bg)",stroke:"var(--line)"},gEdges);
     const t=el("text",{x:mx,y:my+3,"text-anchor":"middle","font-size":11,fill:"var(--muted)"},gEdges);t.textContent=e.label;
@@ -638,7 +648,7 @@ function highlight(code){
     .replace(/(&lt;&lt;[^&]*&gt;&gt;)/g,'<span class="a">$1</span>')
     .replace(/("[^"]*")/g,'<span class="s">$1</span>');
 }
-function updateCode(){const c=genCode();$("#code").innerHTML=highlight(c);persist();}
+function updateCode(){$("#code").value=genCode();persist();}
 
 // ---------- persistence / io ----------
 function persist(){try{localStorage.setItem("pumlbuilder",JSON.stringify(DB));}catch(e){}}
@@ -795,6 +805,23 @@ $("#previewBtn").onclick=()=>{
   plantumlUrl().then(u=>{if(win)win.location.href=u;else window.open(u,"_blank");},()=>{if(win)win.close();toast("미리보기 생성 실패");});
 };
 function dl(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+
+// ---------- code textarea edit ----------
+let _codeTimer=null;
+$("#code").addEventListener("input",()=>{
+  clearTimeout(_codeTimer);
+  _codeTimer=setTimeout(()=>{
+    const txt=$("#code").value;
+    try{
+      const {type:tp,data,pos}=parsePuml(txt);
+      DB[tp]=data;
+      type=tp;sel=null;connect=null;connectFrom=null;
+      document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.type===tp));
+      if(tp!=="sequence"){DB[tp].nodes.forEach(sizeNode);layoutNodes(DB[tp],pos,tp);}
+      buildToolbar();render();inspector();persist();
+    }catch(e){}
+  },500);
+});
 
 // ---------- tabs ----------
 $("#tabs").addEventListener("click",ev=>{
