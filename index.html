@@ -749,15 +749,57 @@ function parseClass(lines){
 }
 function parseState(lines){
   const d={nodes:[],edges:[],nextId:1},amap={};let id=1,initialId=null,finalId=null;
-  lines.forEach(l=>{const m=l.match(/^state\s+(?:"([^"]*)"|(\S+))\s+as\s+(\w+)/);
-    if(m){d.nodes.push({id,x:0,y:0,kind:"state",name:m[1]!=null?m[1]:m[2],_alias:m[3]});amap[m[3]]=id;id++;}});
-  lines.forEach(l=>{
-    if(/^state\b/.test(l))return;const e=splitEdge(l);if(!e)return;
+
+  // 1) note / skinparam / title 블록 제거
+  const cleaned=[];let noteSkip=false,paramDepth=0;
+  for(const l of lines){
+    if(/^note\b/i.test(l)){noteSkip=true;continue;}
+    if(noteSkip){if(/^end\s*note/i.test(l))noteSkip=false;continue;}
+    if(/^title\b/i.test(l))continue;
+    if(/^skinparam\b/i.test(l)){if(l.includes("{"))paramDepth++;continue;}
+    if(paramDepth>0){if(l==="{")paramDepth++;else if(l==="}")paramDepth--;continue;}
+    cleaned.push(l);
+  }
+
+  // 2) 복합 상태 블록 처리: state X { ... } → X를 노드로, 내부는 무시
+  const topLines=[];let blockDepth=0;
+  for(const l of cleaned){
+    if(blockDepth>0){
+      if(l.endsWith("{"))blockDepth++;
+      else if(l==="}"){blockDepth--;}
+      continue;
+    }
+    const cm=l.match(/^state\s+(?:"([^"]*)"|(\S+?))\s*\{/);
+    if(cm){
+      const name=cm[1]??cm[2];
+      if(!amap[name]){amap[name]=id;d.nodes.push({id,x:0,y:0,kind:"state",name,_alias:name});id++;}
+      blockDepth=1;continue;
+    }
+    topLines.push(l);
+  }
+
+  // 3) 명시적 state 선언 (state "name" as alias)
+  topLines.forEach(l=>{
+    const m=l.match(/^state\s+(?:"([^"]*)"|(\S+))\s+as\s+(\w+)/);
+    if(m){const name=m[1]??m[2],alias=m[3];if(!amap[alias]){amap[alias]=id;d.nodes.push({id,x:0,y:0,kind:"state",name,_alias:alias});id++;}}
+  });
+
+  // 4) 전이 파싱 + 미선언 상태 자동 생성
+  function ensureState(name){
+    if(!amap[name]){amap[name]=id;d.nodes.push({id,x:0,y:0,kind:"state",name,_alias:name});id++;}
+    return amap[name];
+  }
+  topLines.forEach(l=>{
+    if(/^state\b/.test(l))return;
+    const e=splitEdge(l);if(!e)return;
     let fromId,toId;
-    if(e.from==="[*]"){if(initialId==null){initialId=id;d.nodes.push({id:id++,x:0,y:0,kind:"initial"});}fromId=initialId;}else fromId=amap[e.from];
-    if(e.to==="[*]"){if(finalId==null){finalId=id;d.nodes.push({id:id++,x:0,y:0,kind:"final"});}toId=finalId;}else toId=amap[e.to];
+    if(e.from==="[*]"){if(initialId==null){initialId=id;d.nodes.push({id:id++,x:0,y:0,kind:"initial"});}fromId=initialId;}
+    else fromId=ensureState(e.from);
+    if(e.to==="[*]"){if(finalId==null){finalId=id;d.nodes.push({id:id++,x:0,y:0,kind:"final"});}toId=finalId;}
+    else toId=ensureState(e.to);
     if(fromId!=null&&toId!=null)d.edges.push({id:id++,from:fromId,to:toId,rel:"transit",label:e.label});
   });
+
   d.nextId=id;return d;
 }
 function parseRobust(lines){
