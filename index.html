@@ -144,6 +144,7 @@ let sel=null;              // {kind:'node'|'edge', id}
 let connect=null;          // {rel} when in connect mode
 let connectFrom=null;      // node id chosen as source
 let drag=null;
+let edgeWpDrag=null;
 
 function D(){return DB[type];}
 
@@ -318,32 +319,42 @@ function el(tag,attrs,parent){const e=document.createElementNS(SVGNS,tag);for(co
 
 function drawEdge(e,p1,p2){
   const r=REL[e.rel];
-  const dx=p2.x-p1.x;
-  const midX=(p1.x+p2.x)/2;
-  const vertical=Math.abs(dx)<2;
-  // angle of arrival at p2 / departure from p1 (horizontal or vertical)
-  const angEnd=vertical?Math.atan2(p2.y-p1.y,0):Math.atan2(0,dx);
-  const angStart=angEnd;
+  const wx=e.wx??((p1.x+p2.x)/2);
+  const wy=e.wy??((p1.y+p2.y)/2);
+  // arrival angle: last segment is always vertical (p2.x side)
+  const angEnd=Math.atan2(p2.y-wy,0);
+  // departure angle: first segment is always horizontal (p1.x side)
+  const angStart=Math.atan2(0,wx-p1.x);
   let ep1={...p1},ep2={...p2};
   if(r.tgtDeco) ep2=along(p2,angEnd+Math.PI,12);
   if(r.srcDeco) ep1=along(p1,angStart,12);
-  const hitD=vertical
-    ?`M ${p1.x} ${p1.y} V ${p2.y}`
-    :`M ${p1.x} ${p1.y} H ${midX} V ${p2.y} H ${p2.x}`;
-  const visD=vertical
-    ?`M ${ep1.x} ${ep1.y} V ${ep2.y}`
-    :`M ${ep1.x} ${ep1.y} H ${midX} V ${ep2.y} H ${ep2.x}`;
+  // 5-segment orthogonal path: H → V → H → V
+  const hitD=`M ${p1.x} ${p1.y} H ${wx} V ${wy} H ${p2.x} V ${p2.y}`;
+  const visD=`M ${ep1.x} ${ep1.y} H ${wx} V ${wy} H ${p2.x} V ${ep2.y}`;
+  const isSel=sel&&sel.kind==="edge"&&sel.id===e.id;
   const hit=el("path",{d:hitD,stroke:"transparent","stroke-width":12,fill:"none",style:"cursor:pointer"},gEdges);
   hit.addEventListener("pointerdown",ev=>ev.stopPropagation());
   hit.onclick=ev=>{ev.stopPropagation();selectEdge(e.id);};
-  el("path",{d:visD,stroke:sel&&sel.kind==="edge"&&sel.id===e.id?"var(--accent)":"#7d7b73","stroke-width":sel&&sel.kind==="edge"&&sel.id===e.id?2:1.4,"stroke-dasharray":r.dash?"5 4":"none",fill:"none"},gEdges);
+  el("path",{d:visD,stroke:isSel?"var(--accent)":"#7d7b73","stroke-width":isSel?2:1.4,"stroke-dasharray":r.dash?"5 4":"none",fill:"none"},gEdges);
   if(r.tgtDeco) deco(r.tgtDeco,p2,angEnd+Math.PI);
   if(r.srcDeco) deco(r.srcDeco,p1,angStart);
   if(e.label){
-    const mx=vertical?p1.x:midX, my=(p1.y+p2.y)/2;
     const w=tw(e.label,"11px var(--sans)")+8;
-    el("rect",{x:mx-w/2,y:my-9,width:w,height:16,rx:4,fill:"var(--bg)",stroke:"var(--line)"},gEdges);
-    const t=el("text",{x:mx,y:my+3,"text-anchor":"middle","font-size":11,fill:"var(--muted)"},gEdges);t.textContent=e.label;
+    el("rect",{x:wx-w/2,y:wy-9,width:w,height:16,rx:4,fill:"var(--bg)",stroke:"var(--line)"},gEdges);
+    const t=el("text",{x:wx,y:wy+3,"text-anchor":"middle","font-size":11,fill:"var(--muted)"},gEdges);t.textContent=e.label;
+  }
+  if(isSel){
+    const handle=el("circle",{cx:wx,cy:wy,r:6,fill:"var(--accent)",stroke:"var(--panel)","stroke-width":2,style:"cursor:move"},gEdges);
+    handle.addEventListener("pointerdown",ev=>{
+      ev.stopPropagation();
+      edgeWpDrag={id:e.id,startWx:wx,startWy:wy,startX:svgPt(ev).x,startY:svgPt(ev).y};
+      svg.setPointerCapture(ev.pointerId);
+    });
+    handle.addEventListener("dblclick",ev=>{
+      ev.stopPropagation();
+      delete e.wx;delete e.wy;
+      render();updateCode();
+    });
   }
 }
 function along(p,ang,d){return {x:p.x+Math.cos(ang)*d,y:p.y+Math.sin(ang)*d};}
@@ -437,12 +448,23 @@ function onNodeDown(ev,n){
 }
 function highlightFrom(){const g=gNodes.querySelector(`[data-node="${connectFrom}"]`);if(g){const s=g.querySelector("rect,circle");if(s)s.setAttribute("stroke","var(--accent)");}}
 svg.addEventListener("pointermove",ev=>{
+  if(edgeWpDrag){
+    const edge=edgeById(edgeWpDrag.id);
+    if(edge){
+      const p=svgPt(ev);
+      edge.wx=Math.round((edgeWpDrag.startWx+(p.x-edgeWpDrag.startX))/8)*8;
+      edge.wy=Math.round((edgeWpDrag.startWy+(p.y-edgeWpDrag.startY))/8)*8;
+      render();
+    }
+    return;
+  }
   if(!drag)return;
   const p=svgPt(ev),n=nodeById(drag.id);if(!n)return;
   n.x=Math.round((p.x-drag.dx)/8)*8;n.y=Math.round((p.y-drag.dy)/8)*8;
   drag.moved=true;render();
 });
 svg.addEventListener("pointerup",ev=>{
+  if(edgeWpDrag){edgeWpDrag=null;updateCode();return;}
   if(drag){const moved=drag.moved,id=drag.id;drag=null;if(!moved)selectNode(id);else updateCode();}
 });
 svg.addEventListener("pointerdown",()=>{if(!connect){sel=null;render();inspector();}else{setConnect(connect.rel!==undefined?null:null);}});
