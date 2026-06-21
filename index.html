@@ -96,6 +96,7 @@
     <button class="tab" data-type="state">스테이트</button>
   </div>
   <div class="spacer"></div>
+  <button class="gbtn" id="clearBtn">초기화</button>
   <button class="gbtn" id="importBtn">불러오기</button>
   <button class="gbtn primary" id="downloadPuml">.puml 내려받기</button>
   <input type="file" id="fileInput" accept=".puml,.txt,.wsd,.iuml,.plantuml" style="display:none">
@@ -832,6 +833,12 @@ function parsePuml(text){
 }
 
 // ---------- top actions ----------
+$("#clearBtn").onclick=()=>{
+  if(!confirm("현재 다이어그램을 초기화할까요?"))return;
+  if(type==="sequence")DB[type]=emptySeq();else DB[type]=empty();
+  sel=null;connect=null;connectFrom=null;
+  buildToolbar();render();inspector();updateCode();toast("초기화했어요");
+};
 $("#copyBtn").onclick=()=>{navigator.clipboard.writeText(genCode()).then(()=>toast("코드를 복사했어요"),()=>toast("복사 실패"));};
 $("#downloadPuml").onclick=()=>{const blob=new Blob([genCode()],{type:"text/plain"});dl(blob,type+".puml");toast(".puml 파일을 내려받았어요");};
 $("#importBtn").onclick=()=>$("#fileInput").click();
